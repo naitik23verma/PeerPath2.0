@@ -1,56 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import MapModal from './MapModal';
 
 function LocationPage({ user }) {
-  const [peers, setPeers] = useState([
-    {
-      id: 1,
-      name: 'Mike Rodriguez',
-      avatar: 'https://via.placeholder.com/50x50/667eea/ffffff?text=M',
-      destination: 'University Campus',
-      currentLocation: 'Downtown Station',
-      departureTime: '9:00 AM',
-      distance: '0.5 km',
-      rating: 4.8,
-      reviews: 12,
-      coordinates: {
-        current: { lat: 40.7128, lng: -74.0060 },
-        destination: { lat: 40.7589, lng: -73.9851 }
-      }
-    },
-    {
-      id: 2,
-      name: 'Emma Wilson',
-      avatar: 'https://via.placeholder.com/50x50/f093fb/ffffff?text=E',
-      destination: 'Shopping Mall',
-      currentLocation: 'Central Park',
-      departureTime: '2:30 PM',
-      distance: '1.2 km',
-      rating: 4.9,
-      reviews: 8,
-      coordinates: {
-        current: { lat: 40.7829, lng: -73.9654 },
-        destination: { lat: 40.7505, lng: -73.9934 }
-      }
-    },
-    {
-      id: 3,
-      name: 'David Kim',
-      avatar: 'https://via.placeholder.com/50x50/4CAF50/ffffff?text=D',
-      destination: 'Library',
-      currentLocation: 'Student Housing',
-      departureTime: '10:15 AM',
-      distance: '0.8 km',
-      rating: 4.7,
-      reviews: 15,
-      coordinates: {
-        current: { lat: 40.7484, lng: -73.9857 },
-        destination: { lat: 40.7527, lng: -73.9772 }
-      }
-    }
-  ]);
-
+  const [peers, setPeers] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [selectedPeer, setSelectedPeer] = useState(null);
   const [showMap, setShowMap] = useState(false);
@@ -60,6 +13,50 @@ function LocationPage({ user }) {
     departureTime: '',
     notes: ''
   });
+  const [isLoading, setIsLoading] = useState(true);
+  const navigate = useNavigate();
+
+  // Fetch existing travel companions on component mount
+  useEffect(() => {
+    const fetchTravelCompanions = async () => {
+      try {
+        const response = await fetch('http://localhost:5000/api/location/travel-companions', {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          // Transform backend data to match frontend format
+          const transformedPeers = data.companions.map(companion => ({
+            id: companion._id,
+            name: companion.name,
+            avatar: companion.profileImage || 'https://via.placeholder.com/50x50/667eea/ffffff?text=U',
+            destination: companion.travelPlans?.[0]?.destination || 'Unknown',
+            currentLocation: 'Current Location',
+            departureTime: companion.travelPlans?.[0]?.date ? 
+              new Date(companion.travelPlans[0].date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 
+              'Unknown',
+            distance: '0.0 km',
+            rating: companion.rating || 5.0,
+            reviews: companion.totalReviews || 0,
+            coordinates: {
+              current: { lat: 40.7128, lng: -74.0060 },
+              destination: { lat: 40.7589, lng: -73.9851 }
+            }
+          }));
+          setPeers(transformedPeers);
+        }
+      } catch (error) {
+        console.error('Error fetching travel companions:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchTravelCompanions();
+  }, []);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -69,25 +66,56 @@ function LocationPage({ user }) {
     }));
   };
 
-  const handleSubmitLocation = (e) => {
+  const handleSubmitLocation = async (e) => {
     e.preventDefault();
     if (userLocation.destination && userLocation.currentLocation && userLocation.departureTime) {
-      const newPeer = {
-        id: Date.now(),
-        name: user.name,
-        avatar: user.profileImage,
-        ...userLocation,
-        distance: '0.0 km',
-        rating: 5.0,
-        reviews: 0,
-        coordinates: {
-          current: { lat: 40.7128, lng: -74.0060 },
-          destination: { lat: 40.7589, lng: -73.9851 }
+      try {
+        // Send travel plan to backend
+        const response = await fetch('http://localhost:5000/api/location/travel-plan', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          },
+          body: JSON.stringify({
+            destination: userLocation.destination,
+            date: new Date().toISOString().split('T')[0] + 'T' + userLocation.departureTime + ':00',
+            transportMode: 'other',
+            description: userLocation.notes || ''
+          })
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log('Travel plan saved:', data);
+          
+          // Update local state with the new peer
+          const newPeer = {
+            id: Date.now(),
+            name: user.name,
+            avatar: user.profileImage,
+            ...userLocation,
+            distance: '0.0 km',
+            rating: 5.0,
+            reviews: 0,
+            coordinates: {
+              current: { lat: 40.7128, lng: -74.0060 },
+              destination: { lat: 40.7589, lng: -73.9851 }
+            }
+          };
+          setPeers(prev => [newPeer, ...prev]);
+          setUserLocation({ destination: '', currentLocation: '', departureTime: '', notes: '' });
+          setShowForm(false);
+          
+          alert('Travel plan shared successfully!');
+        } else {
+          const errorData = await response.json();
+          alert(errorData.message || 'Failed to share travel plan');
         }
-      };
-      setPeers(prev => [newPeer, ...prev]);
-      setUserLocation({ destination: '', currentLocation: '', departureTime: '', notes: '' });
-      setShowForm(false);
+      } catch (error) {
+        console.error('Error sharing travel plan:', error);
+        alert('Failed to share travel plan. Please try again.');
+      }
     }
   };
 
@@ -95,18 +123,119 @@ function LocationPage({ user }) {
     alert(`Connecting with peer #${peerId}. This would open a chat or call interface to coordinate travel plans.`);
   };
 
+  const handleCall = (peerId) => {
+    // Use a unique room ID for both users
+    const roomId = [user._id, peerId].sort().join('_');
+    navigate(`/call/${roomId}`);
+  };
+
   const handleGetLocation = () => {
     if (navigator.geolocation) {
+      // Show loading state
+      const detectButton = document.querySelector('button[onclick="handleGetLocation"]');
+      if (detectButton) {
+        detectButton.textContent = '📍 Detecting...';
+        detectButton.disabled = true;
+      }
+
       navigator.geolocation.getCurrentPosition(
-        (position) => {
-          alert(`Location detected: ${position.coords.latitude}, ${position.coords.longitude}`);
+        async (position) => {
+          const { latitude, longitude } = position.coords;
+          console.log('Location detected:', latitude, longitude);
+          
+          try {
+            // Reverse geocoding to get address
+            const response = await fetch(
+              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`
+            );
+            
+            if (response.ok) {
+              const data = await response.json();
+              const address = data.display_name || `${latitude}, ${longitude}`;
+              
+              // Update the current location input
+              setUserLocation(prev => ({
+                ...prev,
+                currentLocation: address
+              }));
+              
+              // Update backend with user's location
+              try {
+                await fetch('http://localhost:5000/api/location/update', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                  },
+                  body: JSON.stringify({
+                    latitude,
+                    longitude,
+                    address
+                  })
+                });
+              } catch (error) {
+                console.error('Error updating location in backend:', error);
+              }
+              
+              alert(`Location detected and filled: ${address}`);
+            } else {
+              // Fallback to coordinates if reverse geocoding fails
+              const coordinates = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+              setUserLocation(prev => ({
+                ...prev,
+                currentLocation: coordinates
+              }));
+              alert(`Location detected: ${coordinates}`);
+            }
+          } catch (error) {
+            console.error('Error in reverse geocoding:', error);
+            // Fallback to coordinates
+            const coordinates = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+            setUserLocation(prev => ({
+              ...prev,
+              currentLocation: coordinates
+            }));
+            alert(`Location detected: ${coordinates}`);
+          }
+          
+          // Reset button
+          if (detectButton) {
+            detectButton.textContent = '📍 Detect';
+            detectButton.disabled = false;
+          }
         },
         (error) => {
-          alert('Unable to get location. Please enter manually.');
+          console.error('Geolocation error:', error);
+          let errorMessage = 'Unable to get location. Please enter manually.';
+          
+          switch (error.code) {
+            case error.PERMISSION_DENIED:
+              errorMessage = 'Location access denied. Please enable location services and try again.';
+              break;
+            case error.POSITION_UNAVAILABLE:
+              errorMessage = 'Location information unavailable. Please enter manually.';
+              break;
+            case error.TIMEOUT:
+              errorMessage = 'Location request timed out. Please try again.';
+              break;
+          }
+          
+          alert(errorMessage);
+          
+          // Reset button
+          if (detectButton) {
+            detectButton.textContent = '📍 Detect';
+            detectButton.disabled = false;
+          }
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 60000
         }
       );
     } else {
-      alert('Geolocation is not supported by this browser.');
+      alert('Geolocation is not supported by this browser. Please enter your location manually.');
     }
   };
 
@@ -119,6 +248,22 @@ function LocationPage({ user }) {
     setShowMap(false);
     setSelectedPeer(null);
   };
+
+  if (isLoading) {
+    return (
+      <div className="container">
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'center', 
+          alignItems: 'center', 
+          height: '60vh' 
+        }}>
+          <div className="loading" style={{ width: '40px', height: '40px' }}></div>
+          <span style={{ marginLeft: '16px', color: 'white' }}>Loading travel companions...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="container">
@@ -263,7 +408,7 @@ function LocationPage({ user }) {
                   <button 
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleConnect(peer.id);
+                      handleCall(peer.id);
                     }}
                     className="btn btn-secondary btn-small"
                   >

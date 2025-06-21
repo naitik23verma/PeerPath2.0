@@ -8,7 +8,15 @@ const router = express.Router();
 
 // Generate JWT token
 const generateToken = (userId) => {
-  return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '7d' });
+  try {
+    if (!process.env.JWT_SECRET) {
+      throw new Error('JWT_SECRET is not defined in environment variables');
+    }
+    return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '7d' });
+  } catch (error) {
+    console.error('Token generation error:', error);
+    throw error;
+  }
 };
 
 // @route   POST /api/auth/register
@@ -119,6 +127,25 @@ router.post('/register', [
     console.error('Error details:', error);
     console.error('Error message:', error.message);
     console.error('Error stack:', error.stack);
+    
+    // Check for specific error types
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ message: 'Validation error', details: error.message });
+    }
+    
+    if (error.name === 'CastError') {
+      return res.status(400).json({ message: 'Invalid data format' });
+    }
+    
+    if (error.code === 11000) {
+      return res.status(400).json({ message: 'Email already exists' });
+    }
+    
+    // Check if it's a JWT error
+    if (error.message.includes('JWT_SECRET')) {
+      return res.status(500).json({ message: 'Server configuration error' });
+    }
+    
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -185,6 +212,25 @@ router.post('/login', [
     console.error('Error details:', error);
     console.error('Error message:', error.message);
     console.error('Error stack:', error.stack);
+    
+    // Check for specific error types
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ message: 'Validation error', details: error.message });
+    }
+    
+    if (error.name === 'CastError') {
+      return res.status(400).json({ message: 'Invalid data format' });
+    }
+    
+    if (error.code === 11000) {
+      return res.status(400).json({ message: 'Duplicate field value' });
+    }
+    
+    // Check if it's a JWT error
+    if (error.message.includes('JWT_SECRET')) {
+      return res.status(500).json({ message: 'Server configuration error' });
+    }
+    
     res.status(500).json({ message: 'Server error' });
   }
 });

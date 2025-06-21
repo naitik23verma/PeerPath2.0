@@ -1,55 +1,48 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 
 function DoubtPage({ user }) {
-  const [doubts, setDoubts] = useState([
-    {
-      id: 1,
-      subject: 'Mathematics',
-      title: 'Calculus Integration Problem',
-      description: 'I\'m stuck on this integration problem. Can anyone help me understand the steps?',
-      author: 'Alex Johnson',
-      authorImage: 'https://via.placeholder.com/40x40/667eea/ffffff?text=A',
-      timestamp: '2 hours ago',
-      responses: 3,
-      views: 45,
-      authorProfile: {
-        bio: 'Math enthusiast and problem solver',
-        expertiseLevel: 'expert',
-        skills: ['Calculus', 'Linear Algebra', 'Statistics']
-      }
-    },
-    {
-      id: 2,
-      subject: 'Physics',
-      title: 'Quantum Mechanics Concept',
-      description: 'Need help understanding wave-particle duality. Any physics experts here?',
-      author: 'Sarah Chen',
-      authorImage: 'https://via.placeholder.com/40x40/f093fb/ffffff?text=S',
-      timestamp: '5 hours ago',
-      responses: 1,
-      views: 23,
-      authorProfile: {
-        bio: 'Physics researcher and educator',
-        expertiseLevel: 'advanced',
-        skills: ['Quantum Physics', 'Mechanics', 'Electromagnetism']
-      }
-    }
-  ]);
-
+  const navigate = useNavigate();
+  const [doubts, setDoubts] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [newDoubt, setNewDoubt] = useState({
     subject: '',
     title: '',
-    description: ''
+    description: '',
+    priority: 'medium'
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   const subjects = [
     'Mathematics', 'Physics', 'Chemistry', 'Biology', 
     'Computer Science', 'English', 'History', 'Economics',
     'Psychology', 'Engineering', 'Medicine', 'Other'
   ];
+
+  // Fetch doubts from API
+  useEffect(() => {
+    const fetchDoubts = async () => {
+      try {
+        const response = await fetch('http://localhost:5000/api/doubts', {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          setDoubts(data.doubts);
+        }
+      } catch (error) {
+        console.error('Error fetching doubts:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchDoubts();
+  }, []);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -64,36 +57,51 @@ function DoubtPage({ user }) {
     if (newDoubt.subject && newDoubt.title && newDoubt.description) {
       setIsSubmitting(true);
       
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      const doubt = {
-        id: Date.now(),
-        ...newDoubt,
-        author: user.name,
-        authorImage: user.profileImage,
-        timestamp: 'Just now',
-        responses: 0,
-        views: 0,
-        authorProfile: {
-          bio: user.bio || '',
-          expertiseLevel: user.expertiseLevel || 'beginner',
-          skills: user.skills || []
+      try {
+        const response = await fetch('http://localhost:5000/api/doubts', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          },
+          body: JSON.stringify(newDoubt)
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setDoubts(prev => [data.doubt, ...prev]);
+          setNewDoubt({ subject: '', title: '', description: '', priority: 'medium' });
+          setShowForm(false);
+        } else {
+          const errorData = await response.json();
+          alert(errorData.message || 'Failed to post doubt');
         }
-      };
-      setDoubts(prev => [doubt, ...prev]);
-      setNewDoubt({ subject: '', title: '', description: '' });
-      setShowForm(false);
-      setIsSubmitting(false);
+      } catch (error) {
+        console.error('Error posting doubt:', error);
+        alert('Failed to post doubt. Please try again.');
+      } finally {
+        setIsSubmitting(false);
+      }
     }
   };
 
   const handleVideoCall = (doubtId) => {
-    alert(`Initiating video call for doubt #${doubtId}. This would integrate with a video calling service like Zoom or Google Meet.`);
+    // Find the doubt to get more context
+    const doubt = doubts.find(d => d._id === doubtId);
+    if (doubt) {
+      alert(`📹 Initiating video call for doubt: "${doubt.title}"\n\nThis would integrate with a video calling service like:\n• Twilio Video\n• Agora.io\n• WebRTC\n• Zoom API\n\nCall features would include:\n• Video/audio streaming\n• Screen sharing for doubt explanation\n• Chat during call\n• Call recording (optional)\n• Whiteboard for problem solving`);
+    } else {
+      alert(`📹 Initiating video call for doubt #${doubtId}. This would integrate with a video calling service like Zoom or Google Meet.`);
+    }
   };
 
-  const handleChat = (doubtId) => {
-    alert(`Opening chat for doubt #${doubtId}. This would open a real-time chat interface.`);
+  const handleChat = (doubtId, authorId) => {
+    // Navigate to chat page with doubt ID and author ID
+    if (authorId) {
+      navigate(`/chat/${doubtId}/${authorId}`);
+    } else {
+      alert('Unable to start chat: Author information not available');
+    }
   };
 
   const getExpertiseColor = (level) => {
@@ -104,6 +112,22 @@ function DoubtPage({ user }) {
       default: return '#4CAF50';
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="container">
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'center', 
+          alignItems: 'center', 
+          height: '60vh' 
+        }}>
+          <div className="loading" style={{ width: '40px', height: '40px' }}></div>
+          <span style={{ marginLeft: '16px', color: 'white' }}>Loading doubts...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="container">
@@ -165,6 +189,21 @@ function DoubtPage({ user }) {
                 />
               </div>
 
+              <div className="form-group">
+                <label htmlFor="priority">Priority</label>
+                <select
+                  id="priority"
+                  name="priority"
+                  value={newDoubt.priority}
+                  onChange={handleInputChange}
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                  <option value="urgent">Urgent</option>
+                </select>
+              </div>
+
               <button 
                 type="submit" 
                 className="btn btn-primary"
@@ -189,130 +228,97 @@ function DoubtPage({ user }) {
             Recent Doubts
           </h2>
           
-          {doubts.map((doubt, index) => (
-            <div 
-              key={doubt.id} 
-              className="doubt-item"
-              style={{ 
-                animation: `slideInUp 0.5s ease ${index * 0.1}s both`,
-                transition: 'all 0.3s ease'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-2px)';
-                e.currentTarget.style.boxShadow = '0 8px 25px rgba(0, 0, 0, 0.15)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 4px 15px rgba(0, 0, 0, 0.1)';
-              }}
-            >
-              <div className="doubt-header">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <img 
-                    src={doubt.authorImage} 
-                    alt={doubt.author}
-                    style={{ 
-                      width: '32px', 
-                      height: '32px', 
-                      borderRadius: '50%',
-                      transition: 'transform 0.3s ease'
-                    }}
-                    onMouseEnter={(e) => e.target.style.transform = 'scale(1.1)'}
-                    onMouseLeave={(e) => e.target.style.transform = 'scale(1)'}
-                  />
-                  <span style={{ fontWeight: '600' }}>{doubt.author}</span>
-                  <span style={{ color: '#666', fontSize: '14px' }}>{doubt.timestamp}</span>
-                </div>
-                <span className="doubt-subject">{doubt.subject}</span>
-              </div>
-              
-              {/* User profile info for the author */}
-              {doubt.authorProfile && (
-                <div style={{ 
-                  marginBottom: '12px', 
-                  padding: '12px', 
-                  backgroundColor: '#f8f9fa', 
-                  borderRadius: '8px',
-                  border: '1px solid #e9ecef',
-                  animation: 'fadeIn 0.5s ease'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                    <span style={{ fontSize: '12px', color: '#666' }}><b>Bio:</b></span>
-                    <span style={{ fontSize: '12px', color: '#333' }}>{doubt.authorProfile.bio}</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                    <span style={{ fontSize: '12px', color: '#666' }}><b>Expertise:</b></span>
-                    <span style={{
-                      fontSize: '10px',
-                      padding: '2px 6px',
-                      borderRadius: '8px',
-                      backgroundColor: getExpertiseColor(doubt.authorProfile.expertiseLevel),
-                      color: 'white',
-                      fontWeight: '600'
-                    }}>
-                      {doubt.authorProfile.expertiseLevel}
+          {doubts.length === 0 ? (
+            <div className="card" style={{ textAlign: 'center', padding: '40px' }}>
+              <div style={{ fontSize: '3rem', marginBottom: '16px' }}>📚</div>
+              <h3 style={{ color: '#333', marginBottom: '8px' }}>No doubts yet</h3>
+              <p style={{ color: '#666' }}>Be the first to share a doubt!</p>
+            </div>
+          ) : (
+            doubts.map((doubt, index) => (
+              <div 
+                key={doubt._id} 
+                className="doubt-item"
+                style={{ 
+                  animation: `slideInUp 0.5s ease ${index * 0.1}s both`,
+                  transition: 'all 0.3s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 8px 25px rgba(0, 0, 0, 0.15)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 4px 15px rgba(0, 0, 0, 0.1)';
+                }}
+              >
+                <div className="doubt-header">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <img 
+                      src={doubt.author?.profileImage || 'https://via.placeholder.com/40x40/667eea/ffffff?text=U'} 
+                      alt={doubt.author?.name}
+                      style={{ 
+                        width: '32px', 
+                        height: '32px', 
+                        borderRadius: '50%',
+                        transition: 'transform 0.3s ease'
+                      }}
+                      onMouseEnter={(e) => e.target.style.transform = 'scale(1.1)'}
+                      onMouseLeave={(e) => e.target.style.transform = 'scale(1)'}
+                    />
+                    <span style={{ fontWeight: '600' }}>{doubt.author?.name}</span>
+                    <span style={{ color: '#666', fontSize: '14px' }}>
+                      {new Date(doubt.createdAt).toLocaleDateString()}
                     </span>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '12px', color: '#666' }}><b>Skills:</b></span>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                      {doubt.authorProfile.skills?.slice(0, 3).map(skill => (
-                        <span 
-                          key={skill}
-                          style={{
-                            fontSize: '10px',
-                            padding: '2px 6px',
-                            borderRadius: '8px',
-                            backgroundColor: '#667eea',
-                            color: 'white'
-                          }}
-                        >
-                          {skill}
-                        </span>
-                      ))}
-                      {doubt.authorProfile.skills?.length > 3 && (
-                        <span style={{ fontSize: '10px', color: '#666' }}>
-                          +{doubt.authorProfile.skills.length - 3} more
-                        </span>
-                      )}
-                    </div>
-                  </div>
+                  <span className="doubt-subject">{doubt.subject}</span>
                 </div>
-              )}
-              
-              <h3 style={{ marginBottom: '8px', color: '#333' }}>{doubt.title}</h3>
-              <p style={{ color: '#666', marginBottom: '16px' }}>{doubt.description}</p>
-              
-              <div style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '12px', 
-                marginBottom: '16px',
-                fontSize: '14px',
-                color: '#666'
-              }}>
-                <span>👁️ {doubt.views} views</span>
-                <span>💬 {doubt.responses} responses</span>
+                
+                <h3 style={{ marginBottom: '8px', color: '#333' }}>{doubt.title}</h3>
+                <p style={{ color: '#666', marginBottom: '16px' }}>{doubt.description}</p>
+                
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '12px', 
+                  marginBottom: '16px',
+                  fontSize: '14px',
+                  color: '#666'
+                }}>
+                  <span>👁️ {doubt.views} views</span>
+                  <span>💬 {doubt.responses?.length || 0} responses</span>
+                  <span style={{ 
+                    padding: '2px 8px', 
+                    borderRadius: '12px', 
+                    backgroundColor: doubt.priority === 'urgent' ? '#f44336' : 
+                                   doubt.priority === 'high' ? '#ff9800' : 
+                                   doubt.priority === 'medium' ? '#2196f3' : '#4caf50',
+                    color: 'white',
+                    fontSize: '12px'
+                  }}>
+                    {doubt.priority}
+                  </span>
+                </div>
+                
+                <div className="doubt-actions">
+                  <button 
+                    onClick={() => handleVideoCall(doubt._id)}
+                    className="btn btn-primary btn-small"
+                    style={{ transition: 'all 0.3s ease' }}
+                  >
+                    📹 Video Call
+                  </button>
+                  <button 
+                    onClick={() => handleChat(doubt._id, doubt.author?._id)}
+                    className="btn btn-secondary btn-small"
+                    style={{ transition: 'all 0.3s ease' }}
+                  >
+                    💬 Chat
+                  </button>
+                </div>
               </div>
-              
-              <div className="doubt-actions">
-                <button 
-                  onClick={() => handleVideoCall(doubt.id)}
-                  className="btn btn-primary btn-small"
-                  style={{ transition: 'all 0.3s ease' }}
-                >
-                  📹 Video Call
-                </button>
-                <button 
-                  onClick={() => handleChat(doubt.id)}
-                  className="btn btn-secondary btn-small"
-                  style={{ transition: 'all 0.3s ease' }}
-                >
-                  💬 Chat
-                </button>
-              </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
 
         <div style={{ textAlign: 'center', marginTop: '40px' }}>

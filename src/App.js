@@ -6,7 +6,9 @@ import DoubtPage from './components/DoubtPage';
 import LocationPage from './components/LocationPage';
 import Login from './components/Login';
 import SignUp from './components/SignUp';
+import Chat from './components/Chat';
 import ProfilePage from './components/ProfilePage';
+import CallRoom from './components/CallRoom';
 
 function App() {
   const [user, setUser] = useState(null);
@@ -92,6 +94,17 @@ function App() {
             )
           }
         />
+        <Route
+          path="/chat/:doubtId/:otherUserId"
+          element={
+            isLoggedIn ? (
+              <Chat user={user} />
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+        <Route path="/call/:roomId" element={<CallRoom user={user} />} />
       </Routes>
     </div>
   );

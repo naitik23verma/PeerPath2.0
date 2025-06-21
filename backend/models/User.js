@@ -117,37 +117,107 @@ const userSchema = new mongoose.Schema({
       type: Date,
       default: Date.now
     }
+  }],
+  // Location and travel
+  // location: {
+  //   type: {
+  //     type: String,
+  //     enum: ['Point'],
+  //     required: false
+  //   },
+  //   coordinates: {
+  //     type: [Number],
+  //     required: false,
+  //     validate: {
+  //       validator: function(coords) {
+  //         if (!coords) return true;
+  //         return Array.isArray(coords) && coords.length === 2 && 
+  //                typeof coords[0] === 'number' && typeof coords[1] === 'number';
+  //       },
+  //       message: 'Coordinates must be an array of 2 numbers [longitude, latitude]'
+  //     }
+  //   }
+  // },
+  currentAddress: {
+    type: String,
+    default: ''
+  },
+  lastLocationUpdate: {
+    type: Date
+  },
+  travelPlans: [{
+    destination: {
+      type: String,
+      required: true
+    },
+    date: {
+      type: Date,
+      required: true
+    },
+    transportMode: {
+      type: String,
+      enum: ['car', 'bus', 'train', 'plane', 'walking', 'other'],
+      default: 'other'
+    },
+    description: {
+      type: String,
+      default: ''
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now
+    }
   }]
 }, {
   timestamps: true
 });
 
-// Hash password before saving
+// Temporarily comment out geospatial index until we fix the data
+// userSchema.index({ location: '2dsphere' }, { 
+//   sparse: true,
+//   partialFilterExpression: { 'location.coordinates': { $exists: true } }
+// });
+
+// Pre-save hook to handle location updates
 userSchema.pre('save', async function(next) {
   console.log('=== USER MODEL PRE-SAVE HOOK ===');
   console.log('Is password modified?', this.isModified('password'));
+  console.log('Is location modified?', this.isModified('location'));
   console.log('User data before save:', {
     _id: this._id,
     name: this.name,
     email: this.email,
-    expertiseLevel: this.expertiseLevel
+    expertiseLevel: this.expertiseLevel,
+    location: this.location
   });
   
-  if (!this.isModified('password')) {
-    console.log('Password not modified, skipping hashing');
-    return next();
+  // Handle password hashing
+  if (this.isModified('password')) {
+    try {
+      console.log('Hashing password...');
+      const salt = await bcrypt.genSalt(10);
+      this.password = await bcrypt.hash(this.password, salt);
+      console.log('Password hashed successfully');
+    } catch (error) {
+      console.error('Password hashing error:', error);
+      return next(error);
+    }
   }
   
-  try {
-    console.log('Hashing password...');
-    const salt = await bcrypt.genSalt(10);
-    this.password = await bcrypt.hash(this.password, salt);
-    console.log('Password hashed successfully');
-    next();
-  } catch (error) {
-    console.error('Password hashing error:', error);
-    next(error);
-  }
+  // Handle location validation
+  // if (this.isModified('location')) {
+  //   console.log('Location modified, validating...');
+  //   if (this.location && this.location.type === 'Point' && !this.location.coordinates) {
+  //     console.log('Location has type Point but no coordinates, setting to undefined');
+  //     this.location = undefined;
+  //   }
+  // } else if (this.location && this.location.type === 'Point' && !this.location.coordinates) {
+  //   // Also check if location exists but is invalid (even if not modified)
+  //   console.log('Location exists but is invalid, setting to undefined');
+  //   this.location = undefined;
+  // }
+  
+  next();
 });
 
 // Method to compare password
